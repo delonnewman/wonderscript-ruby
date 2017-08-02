@@ -1,0 +1,3 @@
+module WonderScript::Compiler
+
+end
