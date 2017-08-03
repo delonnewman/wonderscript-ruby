@@ -1,7 +1,11 @@
 module WonderScript::Reader
   extend WonderScript::Analyzer
 
-  def self.read_string(str)
-    analyze(EDN.read(str))
+  def self.read(str)
+    EDN::Reader.new(str)
+  end
+
+  def self.read_file(file)
+    read(open(file))
   end
 end

@@ -48,9 +48,16 @@ module WonderScript::Syntax
   class Keyword < Atom
     include Interned
 
-    def self.intern(value)
+    attr_reader :namespace, :name
+
+    def self.intern(ns, name)
       @values ||= {}
-      @values[value] ||= new(value)
+      @values[:"#{ns}/#{name}"] ||= new(ns, name)
+    end
+
+    def initialize(ns, name)
+      @namespace = ns
+      @name      = name
     end
   end
 
@@ -87,8 +94,39 @@ module WonderScript::Syntax
     end
   end
 
-  class Variable < Syntax
+  class List < Literal
+    attr_reader :elements
+
+    def initialize(elements)
+      @elements = elements
+    end
+  end
+
+  class Symbol < Syntax
+    include Interned
+
     attr_reader :namespace, :name
+
+    def self.intern(ns, name)
+      @values ||= {}
+      @values[:"#{ns}/#{name}"] ||= new(ns, name)
+    end
+
+    def initialize(namespace, name)
+      @namespace = namespace
+      @name      = name
+    end
+  end
+
+  class Variable < Syntax
+    include Interned
+
+    attr_reader :namespace, :name
+
+    def self.intern(ns, name)
+      @values ||= {}
+      @values[:"#{ns}/#{name}"] ||= new(ns, name)
+    end
 
     def initialize(namespace, name)
       @namespace = namespace
@@ -158,7 +196,7 @@ module WonderScript::Syntax
     end
   end
 
-  class ClassInstatiation < Syntax
+  class ClassInstantiation < Syntax
     attr_reader :name, :args
 
     def initialize(name, args)
@@ -200,6 +238,31 @@ module WonderScript::Syntax
 
     def initialize(invocable, args)
       @invocable = invocable
+      @args      = args
+    end
+  end
+
+  class BinaryOperator < Application
+    attr_reader :operator, :left, :right
+
+    def initialize(operator, left, right)
+      @operator, @left, @right = operator, left, right
+    end
+  end
+
+  class UnaryOperator < Application
+    attr_reader :operator, :expression
+    
+    def initialize(operator, expression)
+      @operator, @expression = operator, expression
+    end
+  end
+
+  class ArithmeticOperator < Application
+    attr_reader :operator, :args
+
+    def initialize(operator, args)
+      @operator = operator
       @args      = args
     end
   end

@@ -1,6 +1,8 @@
 include WonderScript
 
 module WonderScript::Analyzer
+  include WonderScript::Util
+
   def analyze(form)
     form.to_wonderscript_ast
   end
@@ -14,7 +16,22 @@ module WonderScript::Analyzer
   end
 
   def analyze_quote(form)
-    Syntax::Quote.new(self[1].to_wonderscript_ast)
+    value =
+      if form[1].is_a? EDN::Type::Symbol
+        parts = form[1].to_s.split('/')
+        ns, name =
+          if parts.size === 1
+            [nil, parts[0]]
+          else
+            parts
+          end
+        Syntax::Symbol.intern(ns, name)
+      elsif form[1].is_a? EDN::Type::List
+        Syntax::List.new(form[1].map(&:to_wonderscript_ast))
+      else
+        form[1].to_wonderscript_ast
+      end
+    Syntax::Quote.new(value)
   end
 
   def analyze_macro_definition(form)
@@ -22,11 +39,18 @@ module WonderScript::Analyzer
   end
 
   def analyze_lambda(form)
-    Syntax::Lambda.new(form[1].map(&:to_wonderscript_ast), form.rest.map(&:to_wonderscript_ast))
+    Syntax::Lambda.new(form[1].map(&:to_wonderscript_ast), form.rest.rest.map(&:to_wonderscript_ast))
   end
 
   def analyze_method_resolution(form)
-    Syntax::MethodResolution.new(form[1].to_wonderscript_ast, form[2].to_wonderscript_ast, form.rest.rest.map(&:to_wonderscript_ast))
+    raise 'method resolution should be a list of 3 elements' unless form.size === 3
+    method, args =
+      if form[2].is_a? EDN::Type::Symbol
+        [form[2], []]
+      elsif form[2].is_a? EDN::Type::List
+        [form[2].first, form[2].rest]
+      end
+    Syntax::MethodResolution.new(form[1].to_wonderscript_ast, method.to_wonderscript_ast, args.map(&:to_wonderscript_ast))
   end
 
   def analyze_property_resolution(form)
@@ -34,7 +58,7 @@ module WonderScript::Analyzer
   end
 
   def analyze_class_instantiation(form)
-    Syntax::ClassInstantiation.new(form[1].to_wonderscript_ast, form.rest.map(&:to_wonderscript_ast))
+    Syntax::ClassInstantiation.new(form[1].to_wonderscript_ast, form.rest.rest.map(&:to_wonderscript_ast))
   end
 
   def analyze_assignment(form)
@@ -50,7 +74,62 @@ module WonderScript::Analyzer
   end
 
   def analyze_application(form)
-    Syntax::Application.new(form[1].to_wonderscript_ast, form.rest.map(&:to_wonderscript_ast))
+    Syntax::Application.new(form[0].to_wonderscript_ast, form.rest.map(&:to_wonderscript_ast))
+  end
+
+  BINARY_OPERATORS = {
+    :<         =>  :<,
+    :<=        => :<=,
+    :>         => :>,
+    :>=        => :>=,
+    :mod       => :%,
+    :'bit-and' => :&,
+    :'bit-or'  => :|
+  }
+
+  def binary_operator? tag
+    !!BINARY_OPERATORS[tag]
+  end
+
+  UNARY_OPERATORS = {
+    :not => :!,
+  }
+
+  def unary_operator? tag
+    !!UNARY_OPERATORS[tag]
+  end
+
+  ARITHMETIC_OPERATORS = {
+    :+ => :+,
+    :- => :-,
+    :* => :*,
+    :/ => :/
+  }
+
+  def arithmetic_operator? tag
+    !!ARITHMETIC_OPERATORS[tag]
+  end
+
+  def analyze_arithmetic_operator(form)
+    op = ARITHMETIC_OPERATORS[form[0].to_sym] or raise "invalid arithmetic operator: #{form[0].inspect}"
+    ns, name = parse_symbol(op)
+    Syntax::ArithmeticOperator.new(Syntax::Variable.new(ns, name), form.rest.map(&:to_wonderscript_ast))
+  end
+
+  def analyze_binary_operator(form)
+    argc = form.rest.size
+    raise "wrong numer of arguments, got: #{argc}, expected: 2" unless argc == 2
+    op = BINARY_OPERATORS[form[0].to_sym] or raise "invalid binary operator: #{form[0].inspect}"
+    ns, name = parse_symbol(op)
+    Syntax::BinaryOperator.new(Syntax::Variable.new(ns, name), form[1].to_wonderscript_ast, form[2].to_wonderscript_ast)
+  end
+
+  def analyze_unary_operator(form)
+    argc = form.rest.size
+    raise "wrong numer of arguments, got: #{argc}, expected: 1" unless argc == 1
+    op = UNARY_OPERATORS[form[0].to_sym] or raise "invalid unary operator: #{form[0].inspect}"
+    ns, name = parse_symbol(op)
+    Syntax::UnaryOperator.new(Syntax::Variable.new(ns, name), form[1].to_wonderscript_ast)
   end
 end
 
@@ -68,7 +147,8 @@ end
 
 class Symbol
   def to_wonderscript_ast
-    Syntax::Keyword.intern(self)
+    ns, name = WonderScript::Util.parse_symbol(self)
+    Syntax::Keyword.intern(ns, name)
   end
 end
 
@@ -80,13 +160,7 @@ end
 
 class EDN::Type::Symbol
   def to_wonderscript_ast
-    parts = to_s.split('/')
-    ns, name =
-      if parts.size === 1
-        [nil, parts[0]]
-      else
-        parts
-      end
+    ns, name = WonderScript::Util.parse_symbol(self)
     Syntax::Variable.new(ns, name)
   end
 end
@@ -115,7 +189,7 @@ class Array
   end
 
   def rest
-    slice(1, size) || []
+    drop(1)
   end
 end
 
@@ -127,7 +201,7 @@ end
 
 class Set
   def to_wonderscript_ast
-    Syntax::Map.new(self.map(&:to_wonderscript_ast))
+    Syntax::Set.new(self.map(&:to_wonderscript_ast))
   end
 end
 
@@ -135,8 +209,8 @@ class EDN::Type::List
   include WonderScript::Analyzer
 
   def to_wonderscript_ast
-    tag = first
-    case tag.to_sym
+    tag = first.to_sym
+    case tag
     when :def      then analyze_definition(self)
     when :if       then analyze_conditional(self)
     when :quote    then analyze_quote(self)
@@ -148,7 +222,12 @@ class EDN::Type::List
     when :try      then analyze_exception_handler(self)
     when :loop     then analyze_loop(self)
     else
-      analyze_application(self)
+      if    binary_operator?     tag then analyze_binary_operator(self)
+      elsif unary_operator?      tag then analyze_unary_operator(self)
+      elsif arithmetic_operator? tag then analyze_arithmetic_operator(self)
+      else
+        analyze_application(self)
+      end
     end
   end
 end
