@@ -1,4 +1,33 @@
 module WonderScript::Syntax
+  CHAR_MAP = {
+    '!' => '__BANG__',
+    '$' => '__DOLLAR__',
+    '#' => '__POUND__',
+    '-' => '__DASH__',
+    '@' => '__AT__',
+    '%' => '__PER__',
+    '^' => '__HAT__',
+    '*' => '__STAR__',
+    '>' => '__GT__',
+    '<' => '__LT__',
+    '?' => '__QEST__',
+    '~' => '__CURL__',
+    '|' => '__PIPE__'
+  }
+
+  def self.encode_name(str)
+    return nil unless str
+    buff = StringIO.new
+    for i in 0..str.length
+      if ch = CHAR_MAP[str[i]]
+        buff.print ch 
+      else
+        buff.print str[i]
+      end
+    end
+    buff.string
+  end
+
   class Syntax; end
   class Literal < Syntax; end
   class Atom < Literal
@@ -129,8 +158,12 @@ module WonderScript::Syntax
     end
 
     def initialize(namespace, name)
-      @namespace = namespace
-      @name      = name
+      if namespace
+        @namespace = ::Syntax.encode_name(namespace)
+        @name      = ::Syntax.encode_name(name)
+      else
+        @name = ::Syntax.encode_name(name)
+      end
     end
   end
 

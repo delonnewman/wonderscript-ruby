@@ -8,36 +8,27 @@ module WonderScript
   end
 
   module Syntax
-    CHAR_MAP = {
-      '!' => '__BANG__',
-      '$' => '__DOLLAR__',
-      '#' => '__POUND__',
-      '-' => '__DASH__',
-      '@' => '__AT__',
-      '%' => '__PER__',
-      '^' => '__HAT__',
-      '*' => '__STAR__',
-      '>' => '__GT__',
-      '<' => '__LT__',
-      '?' => '__QEST__'
-    }
-
-    def self.encode_name(str)
-      return nil unless str
-      buff = StringIO.new
-      for i in 0..str.length
-        if ch = CHAR_MAP[str[i]]
-          buff.print ch 
-        else
-          buff.print str[i]
-        end
+    class Syntax
+      def goog_type
+        '*'
       end
-      buff.string
+
+      def primitive?
+        false
+      end
     end
 
     class Nil
       def to_js
         'null'
+      end
+
+      def goog_type
+        'null'
+      end
+
+      def primitive?
+        true
       end
     end
 
@@ -45,11 +36,27 @@ module WonderScript
       def to_js
         value ? 'true' : 'false'
       end
+
+      def goog_type
+        'boolean'
+      end
+
+      def primitive?
+        true
+      end
     end
 
     class Number
       def to_js
         value.to_s
+      end
+
+      def goog_type
+        'number'
+      end
+
+      def primitive?
+        true
       end
     end
 
@@ -61,11 +68,23 @@ module WonderScript
           "mori.keyword('#{namespace}', '#{name}')"
         end
       end
+      
+      def goog_type
+        'Object'
+      end
     end
 
     class String
       def to_js
         "'#{value}'"
+      end
+
+      def goog_type
+        'string'
+      end
+
+      def primitive?
+        true
       end
     end
 
@@ -73,11 +92,19 @@ module WonderScript
       def to_js
         "mori.hashMap(#{pairs.map { |x| "#{x[0].to_js}, #{x[1].to_js}" }.join(',')})"
       end
+
+      def goog_type
+        'Object'
+      end
     end
 
     class Vector
       def to_js
         "mori.vector(#{entries.map(&:to_js).join(',')})"
+      end
+
+      def goog_type
+        'Object'
       end
     end
 
@@ -85,18 +112,35 @@ module WonderScript
       def to_js
         "mori.set([#{elements.map(&:to_js).join(',')}])"
       end
+
+      def goog_type
+        'Object'
+      end
     end
 
     class List
       def to_js
         "mori.list(#{elements.map(&:to_js).join(',')})"
       end
+
+      def goog_type
+        'Object'
+      end
     end
     
+    IMPORTS = {
+      'goog.provide' => 'goog.provide',
+      'Array'        => 'Array'
+    }
+
     class Variable
       def to_js
         if namespace.nil?
-          name
+          if import = IMPORTS[name]
+            import
+          else
+            "ws.core.CURRENT_NS.#{name}"
+          end
         else
           "#{namespace}.#{name}"
         end
@@ -105,30 +149,12 @@ module WonderScript
 
     class Definition
       def to_js
-        ns = ::Syntax.encode_name(name.namespace)
-        nm = ::Syntax.encode_name(name.name)
+        ns = name.namespace
+        nm = name.name
         if ns.nil?
-          "var #{nm}=#{value.to_js};"
-        else
-          nspath = ns.split('.')
-          if nspath.size == 1
-            "#{ns}['#{nm}']=#{value.to_js}"
-          else
-            str = nspath.reduce([]) do |memo, x|
-              if memo.last.nil?
-                memo << [x]
-              else
-                memo << (memo.last.map { |y| y } << x)
-              end
-            end
-            .map do |path|
-              p = path.join('.')
-              "#{p}=#{p}||{};"
-            end
-            .join("\n")
-            "var #{str}\n#{ns}['#{nm}']=#{value.to_js}"
-          end
+          ns = 'ws.core.CURRENT_NS'
         end
+        "#{ns}.#{nm} = #{value.to_js}"
       end
     end
 
@@ -145,6 +171,10 @@ module WonderScript
         else
           "mori.symbol('#{namespace}', '#{name}')"
         end
+      end
+
+      def goog_type
+        'Object'
       end
     end
 
@@ -166,6 +196,15 @@ module WonderScript
           last = "return #{body.last.to_js};"
           rest = body.take(body.size - 1).map(&:to_js).join(';')
           "(function(#{args.map(&:to_js).join(' ')}){ #{rest}#{last} })"
+        end
+      end
+
+      # TODO: type annotations could help here
+      def goog_type
+        if args.empty?
+          "function(...)"
+        else
+          "function(#{args.map(&:goog_type).join(', ')})"
         end
       end
     end
@@ -201,13 +240,13 @@ module WonderScript
 
     class MethodResolution
       def to_js
-        "#{object.to_js}.#{method.to_js}(#{args.map(&:to_js).join('')})"
+        "#{object.to_js}.#{method.name}(#{args.map(&:to_js).join('')})"
       end
     end
 
     class PropertyResolution
       def to_js
-        "#{object.to_js}['#{property.to_js}']"
+        "#{object.to_js}.#{property.name}"
       end
     end
 
@@ -219,11 +258,7 @@ module WonderScript
 
     class Application
       def to_js
-        if invocable.is_a? Variable
-          "#{::Syntax.encode_name(invocable.to_js)}(#{args.map(&:to_js).join(',')})"
-        else
-          "#{invocable.to_js}(#{args.map(&:to_js).join(',')})"
-        end
+        "#{invocable.to_js}(#{args.map(&:to_js).join(',')})"
       end
     end
 

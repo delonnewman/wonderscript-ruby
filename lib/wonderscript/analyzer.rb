@@ -84,7 +84,8 @@ module WonderScript::Analyzer
     :>=        => :>=,
     :mod       => :%,
     :'bit-and' => :&,
-    :'bit-or'  => :|
+    :'bit-or'  => :|,
+    :'='       => :'==='
   }
 
   def binary_operator? tag
@@ -209,25 +210,30 @@ class EDN::Type::List
   include WonderScript::Analyzer
 
   def to_wonderscript_ast
-    tag = first.to_sym
-    case tag
-    when :def      then analyze_definition(self)
-    when :if       then analyze_conditional(self)
-    when :quote    then analyze_quote(self)
-    when :defmacro then analyze_macro_definition(self)
-    when :fn       then analyze_lambda(self)
-    when :'.'      then analyze_method_resolution(self)
-    when :new      then analyze_class_instantiation(self)
-    when :set!     then analyze_assignment(self)
-    when :try      then analyze_exception_handler(self)
-    when :loop     then analyze_loop(self)
-    else
-      if    binary_operator?     tag then analyze_binary_operator(self)
-      elsif unary_operator?      tag then analyze_unary_operator(self)
-      elsif arithmetic_operator? tag then analyze_arithmetic_operator(self)
+    if first.is_a? EDN::Type::Symbol
+      tag = first.to_sym
+      case tag
+      when :def      then analyze_definition(self)
+      when :if       then analyze_conditional(self)
+      when :quote    then analyze_quote(self)
+      when :defmacro then analyze_macro_definition(self)
+      when :fn       then analyze_lambda(self)
+      when :'.'      then analyze_method_resolution(self)
+      when :'.-'     then analyze_property_resolution(self)
+      when :new      then analyze_class_instantiation(self)
+      when :set!     then analyze_assignment(self)
+      when :try      then analyze_exception_handler(self)
+      when :loop     then analyze_loop(self)
       else
-        analyze_application(self)
+        if    binary_operator?     tag then analyze_binary_operator(self)
+        elsif unary_operator?      tag then analyze_unary_operator(self)
+        elsif arithmetic_operator? tag then analyze_arithmetic_operator(self)
+        else
+          analyze_application(self)
+        end
       end
+    else
+      analyze_application(self)
     end
   end
 end
