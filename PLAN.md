@@ -11,3 +11,8 @@ PLAN
 
 - Implement PB&J in WonderScript
   - use SASS and HAML to provide alternate syntax
+
+TODO
+====
+
+- [ ] Add loop/recur and try/catch/finally
