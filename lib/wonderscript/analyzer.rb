@@ -62,7 +62,7 @@ module WonderScript::Analyzer
   end
 
   def analyze_assignment(form)
-    Syntax::Assignment.new(form[1].to_wonderscript_ast, form[2].to_wonderscript_ast, form[3].to_wonderscript_ast)
+    Syntax::Assignment.new(form[1].to_wonderscript_ast, form[2].to_wonderscript_ast)
   end
 
   def analyze_exception_handler(form)
@@ -77,60 +77,23 @@ module WonderScript::Analyzer
     Syntax::Application.new(form[0].to_wonderscript_ast, form.rest.map(&:to_wonderscript_ast))
   end
 
-  BINARY_OPERATORS = {
-    :<         =>  :<,
-    :<=        => :<=,
-    :>         => :>,
-    :>=        => :>=,
-    :mod       => :%,
-    :'bit-and' => :&,
-    :'bit-or'  => :|,
-    :'='       => :'==='
-  }
-
-  def binary_operator? tag
-    !!BINARY_OPERATORS[tag]
-  end
-
-  UNARY_OPERATORS = {
-    :not => :!,
-  }
-
-  def unary_operator? tag
-    !!UNARY_OPERATORS[tag]
-  end
-
-  ARITHMETIC_OPERATORS = {
-    :+ => :+,
-    :- => :-,
-    :* => :*,
-    :/ => :/
-  }
-
-  def arithmetic_operator? tag
-    !!ARITHMETIC_OPERATORS[tag]
-  end
-
   def analyze_arithmetic_operator(form)
     op = ARITHMETIC_OPERATORS[form[0].to_sym] or raise "invalid arithmetic operator: #{form[0].inspect}"
-    ns, name = parse_symbol(op)
-    Syntax::ArithmeticOperator.new(Syntax::Variable.new(ns, name), form.rest.map(&:to_wonderscript_ast))
+    Syntax::ArithmeticOperator.new(Syntax::Variable.new(nil, op.to_s), form.rest.map(&:to_wonderscript_ast))
   end
 
   def analyze_binary_operator(form)
     argc = form.rest.size
-    raise "wrong numer of arguments, got: #{argc}, expected: 2" unless argc == 2
+    raise "wrong number of arguments, got: #{argc}, expected: 2, in: #{form.inspect}" unless argc == 2
     op = BINARY_OPERATORS[form[0].to_sym] or raise "invalid binary operator: #{form[0].inspect}"
-    ns, name = parse_symbol(op)
-    Syntax::BinaryOperator.new(Syntax::Variable.new(ns, name), form[1].to_wonderscript_ast, form[2].to_wonderscript_ast)
+    Syntax::BinaryOperator.new(Syntax::Variable.new(nil, op.to_s), form[1].to_wonderscript_ast, form[2].to_wonderscript_ast)
   end
 
   def analyze_unary_operator(form)
     argc = form.rest.size
     raise "wrong numer of arguments, got: #{argc}, expected: 1" unless argc == 1
     op = UNARY_OPERATORS[form[0].to_sym] or raise "invalid unary operator: #{form[0].inspect}"
-    ns, name = parse_symbol(op)
-    Syntax::UnaryOperator.new(Syntax::Variable.new(ns, name), form[1].to_wonderscript_ast)
+    Syntax::UnaryOperator.new(Syntax::Variable.new(nil, op.to_s), form[1].to_wonderscript_ast)
   end
 end
 

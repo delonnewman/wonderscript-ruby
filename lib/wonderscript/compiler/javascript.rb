@@ -63,9 +63,9 @@ module WonderScript
     class Keyword
       def to_js
         if namespace.nil?
-          "mori.keyword('#{name}')"
+          "ws.core.keyword('#{name}')"
         else
-          "mori.keyword('#{namespace}', '#{name}')"
+          "ws.core.keyword('#{namespace}', '#{name}')"
         end
       end
       
@@ -90,7 +90,7 @@ module WonderScript
 
     class Map
       def to_js
-        "mori.hashMap(#{pairs.map { |x| "#{x[0].to_js}, #{x[1].to_js}" }.join(',')})"
+        "ws.core.hashMap(#{pairs.map { |x| "#{x[0].to_js}, #{x[1].to_js}" }.join(',')})"
       end
 
       def goog_type
@@ -100,7 +100,7 @@ module WonderScript
 
     class Vector
       def to_js
-        "mori.vector(#{entries.map(&:to_js).join(',')})"
+        "ws.core.vector(#{entries.map(&:to_js).join(',')})"
       end
 
       def goog_type
@@ -110,7 +110,7 @@ module WonderScript
 
     class Set
       def to_js
-        "mori.set([#{elements.map(&:to_js).join(',')}])"
+        "ws.core.set([#{elements.map(&:to_js).join(',')}])"
       end
 
       def goog_type
@@ -120,7 +120,7 @@ module WonderScript
 
     class List
       def to_js
-        "mori.list(#{elements.map(&:to_js).join(',')})"
+        "ws.core.list(#{elements.map(&:to_js).join(',')})"
       end
 
       def goog_type
@@ -139,7 +139,7 @@ module WonderScript
           if import = IMPORTS[name]
             import
           else
-            "ws.core.CURRENT_NS.#{name}"
+            "#{name}"
           end
         else
           "#{namespace}.#{name}"
@@ -152,9 +152,27 @@ module WonderScript
         ns = name.namespace
         nm = name.name
         if ns.nil?
-          ns = 'ws.core.CURRENT_NS'
+          "var #{nm}=#{value.to_js};"
+        else
+          nspath = ns.split('.')
+          if nspath.size == 1
+            "#{ns}['#{nm}']=#{value.to_js}"
+          else
+            str = nspath.reduce([]) do |memo, x|
+              if memo.last.nil?
+                memo << [x]
+              else
+                memo << (memo.last.map { |y| y } << x)
+              end
+            end
+            .map do |path|
+              p = path.join('.')
+              "#{p}=#{p}||{};"
+            end
+            .join("\n")
+            "var #{str}\n#{ns}['#{nm}']=#{value.to_js}"
+          end
         end
-        "#{ns}.#{nm} = #{value.to_js}"
       end
     end
 
@@ -167,9 +185,9 @@ module WonderScript
     class Symbol
       def to_js
         if namespace.nil?
-          "mori.symbol('#{name}')"
+          "ws.core.symbol('#{name}')"
         else
-          "mori.symbol('#{namespace}', '#{name}')"
+          "ws.core.symbol('#{namespace}', '#{name}')"
         end
       end
 
@@ -195,7 +213,7 @@ module WonderScript
         else
           last = "return #{body.last.to_js};"
           rest = body.take(body.size - 1).map(&:to_js).join(';')
-          "(function(#{args.map(&:to_js).join(' ')}){ #{rest}#{last} })"
+          "(function(#{args.map(&:to_js).join(', ')}){ #{rest}; #{last} })"
         end
       end
 
