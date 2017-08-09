@@ -137,6 +137,14 @@ module WonderScript
           @name = Util.encode_name(name)
         end
       end
+
+      def to_s
+        if namespace
+          "#{namespace}/#{name}"
+        else
+          name.to_s
+        end
+      end
     end
   
     class Definition < Syntax
@@ -148,10 +156,10 @@ module WonderScript
     end
   
     class Conditional < Syntax
-      attr_reader :predicate, :consequent, :alternate
+      attr_reader :predicates, :default
   
-      def initialize(predicate, conseqent, alternate)
-        @predicate, @consequent, @alternate = predicate, conseqent, alternate
+      def initialize(predicates, default)
+        @predicates, @default = predicates, default
       end
     end
   
@@ -164,30 +172,91 @@ module WonderScript
     end
   
     class MacroDefinition < Syntax
-      attr_reader :name, :args, :body
-  
-      def initialize(name, args, body)
-        @name = name
-        @args = args
-        @body = body
+      attr_reader :name, :function
+
+      def initialize(name, function)
+        @name     = name
+        @function = function
       end
     end
   
+    class Block < Syntax
+      attr_reader :expressions
+
+      def initialize(expressions)
+        @expressions = expressions
+      end
+    end
+
     class Lambda < Syntax
-      attr_reader :args, :body
+      attr_reader :id, :args, :body
   
-      def initialize(args, body)
-        @args = args
-        @body = body
+      def initialize(args, body, capture=nil)
+        @id      = Util.generate_id
+        @args    = args
+        @body    = body
+        @capture = capture
+      end
+    end
+
+    class ArgumentsVector < Syntax
+      def initialize(names, capture=nil)
+        @names   = names
+        @capture = capture
+      end
+    end
+
+    class LambdaBody < Syntax
+      attr_reader :args, :block
+
+      def initialize(args, block)
+        @args    = args
+        @block   = block
+        @capture = capture
       end
     end
   
     class Loop < Syntax
-      attr_reader :bindings, :body
+      attr_reader :id, :bindings, :body
   
       def initialize(binds, body)
         @bindings = binds
         @body     = body
+        @id       = Util.generate_id
+      end
+    end
+
+    module TailCall
+      def tailcall?
+        @tailcall
+      end
+
+      def flag_as_tailcall!
+        @tailcall = true
+      end
+    end
+
+    module NotReturnable
+    end
+
+    class RecursionPoint
+      attr_reader :args
+
+      include TailCall
+      include NotReturnable
+
+      def initialize(args, tailcall=false)
+        @args     = args
+        @tailcall = tailcall
+      end
+    end
+
+    class Bindings < Syntax
+      attr_reader :names, :values
+
+      def initialize(names, values)
+        @names  = names
+        @values = values
       end
     end
   
@@ -198,6 +267,16 @@ module WonderScript
         @try     = try
         @catch   = cblock
         @finally = finally
+      end
+    end
+
+    class Exception < Syntax
+      attr_reader :expression
+
+      include NotReturnable
+
+      def initialize(expression)
+        @expression = expression
       end
     end
   
@@ -241,9 +320,12 @@ module WonderScript
     class Application < Syntax
       attr_reader :invocable, :args
   
-      def initialize(invocable, args)
+      include TailCall
+
+      def initialize(invocable, args, tailcall=false)
         @invocable = invocable
         @args      = args
+        @tailcall  = tailcall
       end
     end
   

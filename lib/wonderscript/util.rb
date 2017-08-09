@@ -9,9 +9,13 @@ module WonderScript
       end
     end
 
-    CHAR_MAP = {
+    def generate_id
+      MurmurHash3::V32.fmix(SecureRandom.hex(4).hex)
+    end
+
+    RESERVED_CHARS = {
       '!' => '__BANG__',
-      '$' => '__DOLLAR__',
+      #'$' => '__DOLLAR__',
       '#' => '__POUND__',
       '-' => '__DASH__',
       '@' => '__AT__',
@@ -26,8 +30,35 @@ module WonderScript
     }
 
     RESERVED_WORDS = {
-      'default' => '__DEFAULT__',
-      'return'  => '__RETURN__'
+      'default'   => '__DEFAULT__',
+      'class'     => '__CLASS__',
+      'function'  => '__FUNC__',
+      'function*' => '__FUNC_STAR__',
+      'return'    => '__RETURN__',
+      'throw'     => '__THROW__',
+      'catch'     => '__CATCH__',
+      'finaly'    => '__FINALLY__',
+      'if'        => '__IF__',
+      'else'      => '__ELSE__',
+      'switch'    => '__SWITCH__',
+      'case'      => '__CASE__',
+      'break'     => '__BREAK__',
+      'continue'  => '__CONTINUE__',
+      'const'     => '__CONST__',
+      'var'       => '__VAR__',
+      'let'       => '__LET__',
+      'do'        => '__DO__',
+      'for'       => '__FOR__',
+      'while'     => '__WHILE__',
+      'each'      => '__EACH__',
+      'in'        => '__IN__',
+      'of'        => '__OF__',
+      'debugger'  => '__DEBUGGER__',
+      'import'    => '__IMPORT__',
+      'with'      => '__WITH__',
+      'async'     => '__ASYNC__',
+      'this'      => '__THIS__',
+      'arguments' => '__ARGS__'
     }
 
     def reserved_word?(str)
@@ -46,8 +77,10 @@ module WonderScript
       :'bit-shift-right'          => :>>,
       :'unsigned-bit-shift-right' => :'>>>',
       :'bit-shift-left'           => :<<,
-      :'='                        => :'===',
-      :'not='                     => :'!=='
+      :'identical?'               => :'===', # PHP same, Ruby Object#equal?
+      :'eqiv?'                    => :'==',  # PHP same, Ruby ===, Ruby also provides has equality with Object#eql?, and ==
+      :and                        => :'&&',
+      :or                         => :'||',
     }
   
     def binary_operator? tag
@@ -64,10 +97,10 @@ module WonderScript
     end
   
     ARITHMETIC_OPERATORS = {
-      :+ => :+,
-      :- => :-,
-      :* => :*,
-      :/ => :/
+      :+   => :+,
+      :-   => :-,
+      :*   => :*,
+      :div => :/   # div exposes floating point division when needed '/' will return a Rational type
     }
 
     JSOPERATORS =
@@ -99,7 +132,7 @@ module WonderScript
       else
         buff = StringIO.new
         for i in 0..str.length
-          if ch = CHAR_MAP[str[i]]
+          if ch = RESERVED_CHARS[str[i]]
             buff.print ch 
           else
             buff.print str[i]

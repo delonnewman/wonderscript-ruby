@@ -3,6 +3,7 @@ GEM
   specs:
     edn (1.1.1)
     libv8 (3.16.14.19)
+    murmurhash3 (0.1.6)
     ref (2.0.0)
     therubyracer (0.12.3)
       libv8 (~> 3.16.14.15)
@@ -15,6 +16,7 @@ PLATFORMS
 
 DEPENDENCIES
   edn
+  murmurhash3
   therubyracer
   yard
 

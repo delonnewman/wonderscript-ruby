@@ -1,3 +1,5 @@
+require 'v8'
+
 module WonderScript
   module Compiler::JavaScript
     extend Analyzer
@@ -129,8 +131,7 @@ module WonderScript
     end
     
     IMPORTS = {
-      'goog.provide' => 'goog.provide',
-      'Array'        => 'Array'
+      'Array' => 'Array'
     }
 
     class Variable
@@ -152,11 +153,11 @@ module WonderScript
         ns = name.namespace
         nm = name.name
         if ns.nil?
-          "var #{nm}=#{value.to_js};"
+          "var #{nm}=#{value.to_js}"
         else
           nspath = ns.split('.')
           if nspath.size == 1
-            "#{ns}['#{nm}']=#{value.to_js}"
+            "#{ns}.#{nm}=#{value.to_js}"
           else
             str = nspath.reduce([]) do |memo, x|
               if memo.last.nil?
@@ -170,7 +171,7 @@ module WonderScript
               "#{p}=#{p}||{};"
             end
             .join("\n")
-            "var #{str}\n#{ns}['#{nm}']=#{value.to_js}"
+            "var #{str}\n#{ns}.#{nm}=#{value.to_js}"
           end
         end
       end
@@ -178,7 +179,23 @@ module WonderScript
 
     class Conditional
       def to_js
-        "(#{predicate.to_js}?#{consequent.to_js}:#{alternate.to_js})"
+        first = predicates.first
+        rest  = predicates.rest.map { |pred| "else if (#{pred[0].to_js}) { return #{pred[1].to_js}; }" }.join("\n")
+        default_ =
+          if default.is_a? RecursionPoint or default.is_a? Exception
+            "#{default.to_js};"
+          else
+            "return #{default.to_js};"
+          end
+        "(function() {
+           if (#{first[0].to_js}) {
+              return #{first[1].to_js};
+           }
+           #{rest}
+           else {
+              #{default_};
+           }
+        }())"
       end
     end
 
@@ -203,17 +220,55 @@ module WonderScript
     end
 
     class MacroDefinition
+      def js
+        @js ||= V8::Context.new
+      end
 
+      def to_js
+        raise 'name should be a symbol' unless name.is_a? Variable
+        code = function.to_js
+        WonderScript::MACROS[name.to_s] = js.eval(code)
+        nil
+      end
+    end
+
+    class Block
+      def to_js
+        last =
+          if expressions.last.is_a? NotReturnable
+            "#{expressions.last.to_js};"
+          else
+            "return #{expressions.last.to_js};"
+          end
+        rest = expressions.take(expressions.size - 1).map(&:to_js).join(';')
+        if rest.empty?
+          last
+        else
+          "#{rest};\n#{last}"
+        end
+      end
     end
 
     class Lambda
       def to_js
-        if body.empty?
-          "(function(#{args.map(&:to_js).join(' ')}){})"
+        xs = args.map(&:to_js)
+        capture = xs.drop_while { |x| x[0] != '&' }.reject { |x| x == '&' }.map { |x| x.sub(/^&/, '') }
+        names   = xs.take_while { |x| x[0] != '&' }
+        raise 'Cannot list arguments after capture variable' unless capture.size <= 1
+        if body.expressions.empty?
+          "(function(#{names.join(' ')}){})"
         else
-          last = "return #{body.last.to_js};"
-          rest = body.take(body.size - 1).map(&:to_js).join(';')
-          "(function(#{args.map(&:to_js).join(', ')}){ #{rest}; #{last} })"
+          if capture.empty?
+            argcheck = "if (arguments.length !== #{names.size}) throw new Error('Wrong number of arguments, expected: #{names.size}, got: ' + arguments.length);"
+            "(function(#{names.join(', ')}){ #{argcheck} #{body.to_js} })"
+          else
+            if names.size > 0
+              argcheck = "if (arguments.length < #{names.size}) throw new Error('Wrong number of arguments, expected at least: #{names.size}, got: ' + arguments.length);"
+              "(function(#{names.join(', ')}){ #{argcheck} var #{capture[0]} = Array.prototype.slice.call(arguments, #{names.size}); #{body.to_js} })"
+            else
+              "(function(#{names.join(', ')}){ var #{capture[0]} = Array.prototype.slice.call(arguments, #{names.size}); #{body.to_js} })"
+            end
+          end
         end
       end
 
@@ -229,25 +284,43 @@ module WonderScript
 
     class Loop
       def to_js
-        "
-        // bind vars
-        try {
-          // execute body
-        }
-        catch (e) {
-          if (e instanceof ws.core.RecursionPoint) {
-            // rebind vars and re-execute
+        names = bindings.names
+        values = bindings.values
+        rebinds = names.map.with_index { |x, i| "#{x.to_js} = e.args[#{i}]" }.join(';')
+        "(function(#{names.map(&:to_js).join(', ')}){
+          while (true) {
+            try {
+              #{body.to_js}
+              break;
+            }
+            catch (e) {
+              if (e.$ws$lang$tag === 'RecursionPoint') {
+                #{rebinds};
+                continue;
+              }
+              else {
+                throw e;
+              }
+            }
           }
-          else {
-            throw e;
-          }
-        }
-        "
+        }(#{values.map(&:to_js).join(', ')}))"
+      end
+    end
+
+    class RecursionPoint
+      def to_js
+        "throw ws.core.RecursionPoint([#{args.map(&:to_js).join(', ')}])";
       end
     end
 
     class ExceptionHandler
 
+    end
+
+    class Exception
+      def to_js
+        "throw #{expression.to_js};"
+      end
     end
 
     class ClassInstantiation
@@ -258,7 +331,7 @@ module WonderScript
 
     class MethodResolution
       def to_js
-        "#{object.to_js}.#{method.name}(#{args.map(&:to_js).join('')})"
+        "#{object.to_js}.#{method.name}(#{args.map(&:to_js).join(', ')})"
       end
     end
 
@@ -274,9 +347,19 @@ module WonderScript
       end
     end
 
+    PRIMITIVE_FUNCTIONS = {
+      'aset' => lambda { |array, index, value| "#{array.to_js}[#{index.to_js}] = #{value.to_js}"  },
+      'aget' => lambda { |array, index| "#{array.to_js}[#{index.to_js}]"  }
+    }
+
     class Application
       def to_js
-        "#{invocable.to_js}(#{args.map(&:to_js).join(',')})"
+        subject = invocable.to_js
+        if func = PRIMITIVE_FUNCTIONS[subject]
+          func.call(*args)
+        else
+          "#{subject}(#{args.map(&:to_js).join(',')})"
+        end
       end
     end
 
