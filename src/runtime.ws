@@ -5,12 +5,7 @@
 
 (def p (. console.log bind))
 
-(def ws.core/RecursionPoint
-  (fn [args]
-    (def obj (Object.create nil))
-    (set! (.- obj $ws$lang$tag) "RecursionPoint")
-    (set! (.- obj args) args)
-    obj))
+(deftype ws.core/RecursionPoint [args])
 
 (set! module.exports ws.core)
 
@@ -26,9 +21,21 @@
   (fn [x]
     (cond
       (nil? x) true
-      (identical? (.- x length) 0) true
-      :else false)))
+      (identical? (count x) 0) true
+      :else
+        false)))
 
+(def count
+  (fn [x]
+    (cond
+      (nil? x) 0
+      (.- x length) (.- x length)
+      :else
+        (loop [i 0, x (first x), xs (rest x)]
+          (cond
+            (nil? x) i
+            :else
+              (recur (+ 1 i) (first x) (rest x)))))))
 (def is
   (fn [expected actual]
     (cond (identical? expected actual) nil
@@ -55,20 +62,18 @@
             (recur (+ 2 i))))))
     obj))
 
-(def Keyword
-  (fn [namespace name]
-    (object "$ws$lang$type" "keyword" "$namespace" namespace "$name" name)))
+(deftype ws.core/Keyword [namespace name])
 
 (def ws.core/keyword
   (fn [&xs]
-    (cond (identical? (.- xs length) 1) (Keyword nil (aget xs 0))
-          (identical? (.- xs length) 2) (Keyword (aget xs 0) (aget xs 1))
+    (cond (identical? (.- xs length) 1) (new ws.core/Keyword nil (aget xs 0))
+          (identical? (.- xs length) 2) (new ws.core/Keyword (aget xs 0) (aget xs 1))
           :else
             (throw (new Error "expected either 1 or 2 arguments")))))
 
 (def ws.core/keyword?
   (fn [x]
-    (identical? (aget x "$ws$lang$type") "keyword")))
+    (instance? x ws.core/Keyword)))
 
 (def ws.core/namespace
   (fn [x]
@@ -78,41 +83,23 @@
   (fn [x]
     (.- x name)))
 
-(def Symbol
-  (fn [namespace name]
-    (object "$ws$lang$type" "symbol" "$namespace" namespace "$name" name)))
+(deftype Symbol[namespace name])
 
 (def ws.core/symbol
   (fn [&xs]
-    (cond (identical? (.- xs length) 1) (Symbol nil (aget xs 0))
-          (identical? (.- xs length) 2) (Symbol (aget xs 0) (aget xs 1))
+    (cond (identical? (.- xs length) 1) (new Symbol nil (aget xs 0))
+          (identical? (.- xs length) 2) (new Symbol (aget xs 0) (aget xs 1))
           :else
             (throw (new Error "expected either 1 or 2 arguments")))))
 
-(def PersistentList
-  ((fn []
-    (def first
-      (fn [l]
-        (fn []
-          (aget l "$h"))))
-    
-    (def rest
-      (fn [l]
-        (fn []
-          (aget l "$t"))))
-    
-    (def cons
-      (fn [l]
-        (fn [x]
-          (PersistentList x l (+ 1 (.- l length))))))
+(def ws.core/symbol?
+  (fn [x]
+    (instance? x ws.core/Symbol)))
 
-    ;; constructor
-    (fn [h t length]
-      (def obj (object "$h" h "$t" t "length" length))
-      (aset obj "first" (first obj))
-      (aset obj "rest" (rest obj))
-      (aset obj "cons" (cons obj))
-      obj))))
+(deftype PersistentList [h t length]
+  (first [l] (.- l h))
+  (rest [l] (.- l t))
+  (cons [l x] (new PersistentList x l (+ 1 (.- l length)))))
 
 (def first
   (fn [col]
@@ -121,15 +108,21 @@
       :else
         (. col first))))
 
+(def rest
+  (fn [col]
+    (cond
+      (array? col) (. col (slice 1))
+      :else
+        (. col rest))))
+
 (def cons
   (fn [x col]
-    (p col)
     (cond
-      (array? col) (Array.prototype.contact.call col x)
+      (array? col) (Array.prototype.concat.call col x)
       :else
         (. col (cons x)))))
 
-(def empty-list (PersistentList nil nil 0))
+(def empty-list (new PersistentList nil nil 0))
 
 (def ws.core/list
   (fn [&xs]
@@ -146,6 +139,10 @@
                           (recur (- i 1))))))
                l)))))
 
+(def ws.core/list?
+  (fn [x]
+    (instance? x PersistentList)))
+
 (def PersistentArrayMap
   ((fn []
 
@@ -156,6 +153,25 @@
 
 (def ws.core/vector array)
 
+(def map
+  (fn [f col]
+    (cond
+      (empty? col) col
+      :else
+        (loop [l empty-list, x (first col), xs (rest col)]
+          (cond
+            (nil? x) l
+            :else
+              (recur (cons (f x) l) (first xs) (rest xs)))))))
+
+(def reverse
+  (fn [col]
+    (loop [l empty-list, x (first col), xs (rest col)]
+      (cond
+        (nil? x) l
+        :else
+          (recur (cons x l) (first xs) (rest xs))))))
+
 ;(p [1 2 3 4 5])
 
 ;(def xs (list 1 2 3 4 5))
@@ -164,6 +180,31 @@
 ;(p (list))
 ;(p (quote (1 2 3 4)))
 ;(p (List nil nil 0))
+
+(def inc
+  (fn [x]
+    (+ 1 x)))
+
+(def dec
+  (fn [x]
+    (- x 1)))
+
+(def add+
+  (fn [&xs]
+    (cond (empty? xs) 0
+          (identical? 1 (count xs)) (first xs)
+          :else
+            (loop [x (first xs) sum 0]
+              (cond (nil? x) sum
+                    :else
+                      (recur (first xs) (+ sum x)))))))
+
+(p add+)
+
+(def xs (quote (1 2 3 4)))
+(p xs)
+(p (reverse (map inc xs)))
+(p (cons 1 [1 2 3]))
 
 ;; HAMT implementation blatantly stolen from (https://github.com/mattbierner/hamt/blob/master/lib/hamt.js)
 ;; Configuration

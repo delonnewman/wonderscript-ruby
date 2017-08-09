@@ -26,7 +26,10 @@ module WonderScript
       '<' => '__LT__',
       '?' => '__QEST__',
       '~' => '__CURL__',
-      '|' => '__PIPE__'
+      '|' => '__PIPE__',
+      '+' => '__PLUS__',
+      '/' => '__BSLASH__',
+      '\\' => '__FSLASH__'
     }
 
     RESERVED_WORDS = {
@@ -81,6 +84,7 @@ module WonderScript
       :'eqiv?'                    => :'==',  # PHP same, Ruby ===, Ruby also provides has equality with Object#eql?, and ==
       :and                        => :'&&',
       :or                         => :'||',
+      :instance?                  => :'instanceof',
     }
   
     def binary_operator? tag

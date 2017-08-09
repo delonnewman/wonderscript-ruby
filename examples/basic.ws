@@ -1,10 +1,13 @@
 ; vim: ft=clojure
 1
 :a
+:user/a
+(quote a)
+(quote user/a)
 true
 false
 nil
-(console.log "hello")
+(p "hello")
 {:a 1 :b 2}
 {:a {:b 1} :c {:d {:e 1} :f 2}}
 [1 2 3 4]
@@ -12,8 +15,8 @@ nil
 (- 1 2 3 4 5)
 (< 0 9)
 (fn [x] x)
-(if 1 2 3)
-(if (if 1 2) 2 3)
+(cond 1 2 :else 3)
+(cond 1 (cond 1 2) :else 3)
 (def x 1)
-(def pbnj.core/str
-  (fn [] (Array.prototype.slice.call arguments)))
+(def ws.core/x 1)
+(def ws.core/identity (fn [x] x))

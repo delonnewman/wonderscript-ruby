@@ -5,8 +5,10 @@ module WonderScript
         case target
         when :javascript
           WonderScript::Compiler::JavaScript.compile(form)
+        when :ruby
+          WonderScript::Compiler::Ruby.compile(form)
         else
-          raise "don't know how to compile to target #{t.inspect}"
+          raise "don't know how to compile to target #{target.inspect}"
         end
       end
 

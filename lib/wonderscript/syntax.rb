@@ -279,6 +279,36 @@ module WonderScript
         @expression = expression
       end
     end
+
+    class TypeDefinition < Syntax
+      attr_reader :attributes, :protocols, :methods
+
+      def initialize(attrs, protocols, methods)
+        @attributes = attrs
+        @protocols  = protocols
+        @methods    = methods
+      end
+    end
+
+    class TypeMethod < Syntax
+      attr_reader :name, :args, :body
+
+      def initialize(name, args, body)
+        @name = name
+        @args = args
+        @body = body
+      end
+    end
+
+    class ProtocolDefinition < Syntax
+      attr_reader :name, :protocols, :methods
+
+      def initialize(name, protocols, methods)
+        @name      = name
+        @protocols = protocols
+        @methods   = methods
+      end
+    end
   
     class ClassInstantiation < Syntax
       attr_reader :name, :args

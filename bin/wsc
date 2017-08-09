@@ -1,10 +1,11 @@
 #!/usr/bin/env ruby
 require_relative '../lib/wonderscript'
 require_relative '../lib/wonderscript/compiler/javascript'
+require_relative '../lib/wonderscript/compiler/ruby'
 
 if ARGV.empty?
-  puts "USAGE: #$0 FILE"
+  puts "USAGE: #$0 FILE TARGET"
   exit 0
 end
 
-puts WonderScript::Compiler.compile_file(ARGV[0])
+puts WonderScript::Compiler.compile_file(ARGV[0], target: (ARGV[1] || :javascript).intern)

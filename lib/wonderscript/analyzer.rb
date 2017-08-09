@@ -101,6 +101,36 @@ module WonderScript
     def analyze_class_instantiation(form)
       Syntax::ClassInstantiation.new(form[1].to_wonderscript_ast, form.rest.rest.map(&:to_wonderscript_ast))
     end
+
+    def analyze_type_definition(form)
+      raise 'second element of a type definition should be a symbol' unless form[1].is_a? EDN::Type::Symbol
+      raise 'third element of a type definition should be a vector' unless form[2].is_a? Array
+      specs = form.rest.rest.rest
+      protos = specs.select { |x| x.is_a? EDN::Type::Symbol }.map(&:to_wonderscript_ast)
+      methods = specs.select { |x| x.is_a? EDN::Type::List }.map do |meth|
+        Syntax::TypeMethod.new(
+          meth[0].to_wonderscript_ast,
+          meth[1].map(&:to_wonderscript_ast),
+          Syntax::Block.new(meth.rest.rest.map(&:to_wonderscript_ast)))
+      end
+      # TODO: TypeMethods need to have a reference of the type that they are a part of
+      Syntax::Definition.new(
+        form[1].to_wonderscript_ast,
+        Syntax::TypeDefinition.new(form[2].map(&:to_wonderscript_ast), protos, methods))
+    end
+
+    def analyze_protocol_definition(form)
+      raise 'second element of a type definition should be a symbol' unless form[1].is_a? EDN::Type::Symbol
+      specs = form.rest.rest
+      protos = specs.select { |x| x.is_a? EDN::Type::Symbol }.map(&:to_wonderscript_ast)
+      methods = specs.select { |x| x.is_a? EDN::Type::List }.map do |meth|
+        Syntax::TypeMethod.new(
+          meth[0].to_wonderscript_ast,
+          meth[1].map(&:to_wonderscript_ast),
+          Syntax::Block.new(meth.rest.rest.map(&:to_wonderscript_ast)))
+      end
+      Syntax::ProtocolDefinition.new(form[1].to_wonderscript_ast, protos, methods)
+    end
   
     def analyze_assignment(form)
       Syntax::Assignment.new(form[1].to_wonderscript_ast, form[2].to_wonderscript_ast)
@@ -239,19 +269,21 @@ class EDN::Type::List
     if first.is_a? EDN::Type::Symbol
       tag = first.to_sym
       case tag
-      when :def      then analyze_definition(form)
-      when :cond     then analyze_conditional(form)
-      when :quote    then analyze_quote(form)
-      when :defmacro then analyze_macro_definition(form)
-      when :fn       then analyze_lambda(form)
-      when :'.'      then analyze_method_resolution(form)
-      when :'.-'     then analyze_property_resolution(form)
-      when :new      then analyze_class_instantiation(form)
-      when :set!     then analyze_assignment(form)
-      when :try      then analyze_exception_handler(form)
-      when :loop     then analyze_loop(form)
-      when :throw    then analyze_exception(form)
-      when :recur    then analyze_recursion_point(form)
+      when :def         then analyze_definition(form)
+      when :cond        then analyze_conditional(form)
+      when :quote       then analyze_quote(form)
+      when :defmacro    then analyze_macro_definition(form)
+      when :fn          then analyze_lambda(form)
+      when :'.'         then analyze_method_resolution(form)
+      when :'.-'        then analyze_property_resolution(form)
+      when :new         then analyze_class_instantiation(form)
+      when :set!        then analyze_assignment(form)
+      when :try         then analyze_exception_handler(form)
+      when :loop        then analyze_loop(form)
+      when :throw       then analyze_exception(form)
+      when :recur       then analyze_recursion_point(form)
+      when :deftype     then analyze_type_definition(form)
+      when :defprotocol then analyze_protocol_definition(form)
       else
         if    binary_operator?     tag then analyze_binary_operator(form)
         elsif unary_operator?      tag then analyze_unary_operator(form)

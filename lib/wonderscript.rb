@@ -8,6 +8,7 @@ module WonderScript
   VERSION = '0.0.1'.freeze
 end
 
+require_relative 'wonderscript/core_ext'
 require_relative 'wonderscript/util'
 require_relative 'wonderscript/syntax'
 require_relative 'wonderscript/analyzer'

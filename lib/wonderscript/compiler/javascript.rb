@@ -4,6 +4,19 @@ module WonderScript
   module Compiler::JavaScript
     extend Analyzer
 
+    PRIMITIVE_FUNCTIONS = {
+      'aset'   => lambda { |array, index, value| "#{array.to_js}[#{index.to_js}] = #{value.to_js}"  },
+      'aget'   => lambda { |array, index| "#{array.to_js}[#{index.to_js}]"  },
+      'array'  => lambda { |*args| "[#{args.map(&:to_js).join(', ')}]" },
+      'object' => lambda { |*args| "{#{args.partition(2).map { |x| "#{x[0].to_js}:#{x[1].to_js}" }.join(', ')}}" },
+      'str'    => lambda { |*args| "[#{args.map(&:to_js).join(', ')}].join('')" },
+      'p'      => lambda { |*args| "console.log(#{args.map(&:to_js).join(', ')})" },
+    }
+
+    IMPORTS = {
+      'Array' => 'Array'
+    }
+
     def self.compile(form)
       analyze(form).to_js
     end
@@ -11,10 +24,6 @@ module WonderScript
 
   module Syntax
     class Syntax
-      def goog_type
-        '*'
-      end
-
       def primitive?
         false
       end
@@ -22,10 +31,6 @@ module WonderScript
 
     class Nil
       def to_js
-        'null'
-      end
-
-      def goog_type
         'null'
       end
 
@@ -39,10 +44,6 @@ module WonderScript
         value ? 'true' : 'false'
       end
 
-      def goog_type
-        'boolean'
-      end
-
       def primitive?
         true
       end
@@ -51,10 +52,6 @@ module WonderScript
     class Number
       def to_js
         value.to_s
-      end
-
-      def goog_type
-        'number'
       end
 
       def primitive?
@@ -70,19 +67,11 @@ module WonderScript
           "ws.core.keyword('#{namespace}', '#{name}')"
         end
       end
-      
-      def goog_type
-        'Object'
-      end
     end
 
     class String
       def to_js
         "'#{value}'"
-      end
-
-      def goog_type
-        'string'
       end
 
       def primitive?
@@ -94,19 +83,11 @@ module WonderScript
       def to_js
         "ws.core.hashMap(#{pairs.map { |x| "#{x[0].to_js}, #{x[1].to_js}" }.join(',')})"
       end
-
-      def goog_type
-        'Object'
-      end
     end
 
     class Vector
       def to_js
         "ws.core.vector(#{entries.map(&:to_js).join(',')})"
-      end
-
-      def goog_type
-        'Object'
       end
     end
 
@@ -114,30 +95,18 @@ module WonderScript
       def to_js
         "ws.core.set([#{elements.map(&:to_js).join(',')}])"
       end
-
-      def goog_type
-        'Object'
-      end
     end
 
     class List
       def to_js
         "ws.core.list(#{elements.map(&:to_js).join(',')})"
       end
-
-      def goog_type
-        'Object'
-      end
     end
     
-    IMPORTS = {
-      'Array' => 'Array'
-    }
-
     class Variable
       def to_js
         if namespace.nil?
-          if import = IMPORTS[name]
+          if import = Compiler::JavaScript::IMPORTS[name]
             import
           else
             "#{name}"
@@ -207,10 +176,6 @@ module WonderScript
           "ws.core.symbol('#{namespace}', '#{name}')"
         end
       end
-
-      def goog_type
-        'Object'
-      end
     end
 
     class Quote
@@ -271,15 +236,6 @@ module WonderScript
           end
         end
       end
-
-      # TODO: type annotations could help here
-      def goog_type
-        if args.empty?
-          "function(...)"
-        else
-          "function(#{args.map(&:goog_type).join(', ')})"
-        end
-      end
     end
 
     class Loop
@@ -294,7 +250,7 @@ module WonderScript
               break;
             }
             catch (e) {
-              if (e.$ws$lang$tag === 'RecursionPoint') {
+              if (e instanceof ws.core.RecursionPoint) {
                 #{rebinds};
                 continue;
               }
@@ -307,9 +263,58 @@ module WonderScript
       end
     end
 
+    class TypeDefinition
+      def to_js
+        binds = attributes.map { |attr| "this.#{attr.to_js} = #{attr.to_js}" }.join(';')
+        protos = protocols.map { |proto| "#{proto.to_js}(ctr.prototype)" }.join(";\n")
+        meths  = methods.map { |meth| "ctr.prototype.#{meth.to_js}" }.join(";\n")
+        "(function(){
+        var ctr = function(#{attributes.map(&:to_js).join(', ')}) {
+            #{binds};
+        }
+        ctr.prototype = {};
+        #{protos};
+        #{meths};
+        return ctr;
+        }())"
+      end
+    end
+
+    class TypeMethod
+      def to_js
+        xs = args.map(&:to_js)
+        capture = xs.drop_while { |x| x[0] != '&' }.reject { |x| x == '&' }.map { |x| x.sub(/^&/, '') }
+        names   = xs.take_while { |x| x[0] != '&' }
+        argc    = names.size - 1
+        this    = names.first
+        args_   = names.drop(1)
+        #binds   = args_.map { |x| "var #{x} = this.#{x}" }.join(';')
+        raise 'Cannot list arguments after capture variable' unless capture.size <= 1
+        if body.expressions.empty?
+          "#{name.to_js} = (function(#{names.drop(1).join(', ')}){})"
+        else
+          if capture.empty?
+            if names.size > 0
+              argcheck = "if (arguments.length !== #{argc}) throw new Error('Wrong number of arguments, expected: #{argc}, got: ' + arguments.length);"
+              "#{name.to_js} = (function(#{args_.join(', ')}){ var #{this} = this; #{argcheck} #{body.to_js} })"
+            else
+              "#{name.to_js} = (function(){ #{body.to_js} })"
+            end
+          else
+            if names.size > 0
+              argcheck = "if (arguments.length < #{argc}) throw new Error('Wrong number of arguments, expected at least: #{argc}, got: ' + arguments.length);"
+              "#{name.to_js} = (function(#{args_.join(', ')}){ #{argcheck} var #{this} = this; var #{capture[0]} = Array.prototype.slice.call(arguments, #{argc}); #{body.to_js} })"
+            else
+              "#{name.to_js} = (function(){ var #{capture[0]} = Array.prototype.slice.call(arguments, #{argc}); #{body.to_js} })"
+            end
+          end
+        end
+      end
+    end
+
     class RecursionPoint
       def to_js
-        "throw ws.core.RecursionPoint([#{args.map(&:to_js).join(', ')}])";
+        "throw new ws.core.RecursionPoint([#{args.map(&:to_js).join(', ')}])";
       end
     end
 
@@ -347,15 +352,10 @@ module WonderScript
       end
     end
 
-    PRIMITIVE_FUNCTIONS = {
-      'aset' => lambda { |array, index, value| "#{array.to_js}[#{index.to_js}] = #{value.to_js}"  },
-      'aget' => lambda { |array, index| "#{array.to_js}[#{index.to_js}]"  }
-    }
-
     class Application
       def to_js
         subject = invocable.to_js
-        if func = PRIMITIVE_FUNCTIONS[subject]
+        if func = Compiler::JavaScript::PRIMITIVE_FUNCTIONS[subject]
           func.call(*args)
         else
           "#{subject}(#{args.map(&:to_js).join(',')})"
