@@ -1,7 +1,7 @@
 ; vim: ft=clojure
 "use strict"
 
-;; Practical, Simple, Useful
+;; Practical, Simple, Flexible
 
 (def p (. console.log bind))
 
