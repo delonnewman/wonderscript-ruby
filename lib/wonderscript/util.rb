@@ -24,7 +24,7 @@ module WonderScript
       '*' => '__STAR__',
       '>' => '__GT__',
       '<' => '__LT__',
-      '?' => '__QEST__',
+      '?' => '__QUEST__',
       '~' => '__CURL__',
       '|' => '__PIPE__',
       '+' => '__PLUS__',
@@ -69,7 +69,7 @@ module WonderScript
     end
   
     BINARY_OPERATORS = {
-      :<                          =>  :<,
+      :<                          => :<,
       :<=                         => :<=,
       :>                          => :>,
       :>=                         => :>=,
@@ -84,7 +84,7 @@ module WonderScript
       :'eqiv?'                    => :'==',  # PHP same, Ruby ===, Ruby also provides has equality with Object#eql?, and ==
       :and                        => :'&&',
       :or                         => :'||',
-      :instance?                  => :'instanceof',
+      :instance?                  => :' instanceof ',
     }
   
     def binary_operator? tag

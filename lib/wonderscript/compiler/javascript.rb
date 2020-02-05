@@ -11,11 +11,11 @@ module WonderScript
       'object' => lambda { |*args| "{#{args.partition(2).map { |x| "#{x[0].to_js}:#{x[1].to_js}" }.join(', ')}}" },
       'str'    => lambda { |*args| "[#{args.map(&:to_js).join(', ')}].join('')" },
       'p'      => lambda { |*args| "console.log(#{args.map(&:to_js).join(', ')})" },
-    }
+    }.freeze
 
     IMPORTS = {
       'Array' => 'Array'
-    }
+    }.freeze
 
     def self.compile(form)
       analyze(form).to_js
