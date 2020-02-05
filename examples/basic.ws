@@ -18,5 +18,6 @@ nil
 (cond 1 2 :else 3)
 (cond 1 (cond 1 2) :else 3)
 (def x 1)
+(def user/x 1)
 (def ws.core/x 1)
 (def ws.core/identity (fn [x] x))

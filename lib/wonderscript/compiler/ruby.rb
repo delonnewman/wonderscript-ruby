@@ -111,7 +111,7 @@ module WonderScript
             "#{name}"
           end
         else
-          "#{namespace.upcase}::#{name}"
+          "#{namespace.capitalize}::#{name}"
         end
       end
     end
@@ -123,8 +123,13 @@ module WonderScript
         if ns.nil?
           "#{nm}=#{value.to_ruby}"
         else
-          ns = name.namespace.split('.').map(&:upcase).join('::')
-          "def #{ns}.#{nm}; #{value.to_ruby} end"
+          nspath = ns.split('.').map(&:capitalize)
+          if nspath.size == 1
+            "module #{nspath.first}\n\tdef self.#{nm}\n\t\t#{value.to_ruby}\n\tend\nend"
+          else
+            p nspath
+            "test"
+          end
         end
       end
     end
@@ -133,13 +138,12 @@ module WonderScript
       def to_ruby
         first = predicates.first
         rest  = predicates.rest.map { |pred| "elsif #{pred[0].to_ruby} then #{pred[1].to_ruby}" }.join("\n")
-        "
-        if #{first[0].to_ruby} then #{first[1].to_ruby}
-          #{rest}
+        "if #{first[0].to_ruby}
+        #{first[1].to_ruby}
+        #{rest}
         else
           #{default.to_ruby}
-        end
-        "
+        end"
       end
     end
 

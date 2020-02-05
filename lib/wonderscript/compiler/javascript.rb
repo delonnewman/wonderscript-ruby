@@ -153,6 +153,8 @@ module WonderScript
         default_ =
           if default.is_a? RecursionPoint or default.is_a? Exception
             "#{default.to_js};"
+          elsif default.nil?
+            "return null;"
           else
             "return #{default.to_js};"
           end

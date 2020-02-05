@@ -16,7 +16,7 @@ module WonderScript
         io = StringIO.new
         r  = Reader.read_string(str)
         r.each do |form|
-          io.puts "#{compile(form, target: target)};"
+          io.puts "#{compile(form, target: target)}"
         end
       end
 
@@ -24,7 +24,7 @@ module WonderScript
         io = StringIO.new
         r  = Reader.read_file(file)
         r.each do |form|
-          io.puts "#{compile(form, target: target)};"
+          io.puts "#{compile(form, target: target)}"
         end
         io.string
       end

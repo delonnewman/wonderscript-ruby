@@ -83,7 +83,7 @@
   (fn [x]
     (.- x name)))
 
-(deftype Symbol[namespace name])
+(deftype Symbol [namespace name])
 
 (def ws.core/symbol
   (fn [&xs]
